@@ -34,6 +34,19 @@ El servidor utiliza reflexión para registrar rutas y asociarlas con métodos, s
 
 ![](https://github.com/hakki17/App-Server-Architectures-IoC-Reflection-Workshop/blob/main/img/tree2.png)
 
+- **annotations**  
+  Contiene las anotaciones personalizadas que definen comportamientos específicos para los controladores, métodos y parámetros, como `@GetMapping`, `@RequestParam` y `@RestController`. Estas anotaciones facilitan la creación de rutas HTTP y la configuración de servicios.
+
+- **examples**  
+  Aquí se encuentran las clases que utilizan las anotaciones y la infraestructura del framework. `GreetingController.java` es un controlador que maneja solicitudes HTTP y responde con mensajes.
+
+- **httpServer**  
+  Esta carpeta contiene las clases que implementan la lógica del servidor HTTP, como `HttpServer.java` (el servidor principal), `HttpRequest.java`, `HttpResponse.java`, y `Service.java`. Aquí está el núcleo que maneja las peticiones y respuestas.
+
+- **MicroSpringBoot.java**  
+  La clase principal que arranca la aplicación.
+
+
 ## Requisitos
 
 - Java 17
