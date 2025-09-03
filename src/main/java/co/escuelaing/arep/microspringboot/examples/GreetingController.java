@@ -4,10 +4,11 @@
  */
 package co.escuelaing.arep.microspringboot.examples;
 
-import co.escuelaing.arep.microspringboot.annotations.RestController;
 import java.util.concurrent.atomic.AtomicLong;
+
 import co.escuelaing.arep.microspringboot.annotations.GetMapping;
 import co.escuelaing.arep.microspringboot.annotations.RequestParam;
+import co.escuelaing.arep.microspringboot.annotations.RestController;
 /**
  *
  * @author maria.sanchez-m
@@ -22,4 +23,14 @@ public class GreetingController {
 	public static String greeting(@RequestParam(value = "name", defaultValue = "World") String name) {
 		return "Hola " + name;
 	}
+
+	@GetMapping("/pi")
+    public static String pi() {
+        return String.valueOf(Math.PI);
+    }
+
+	@GetMapping("/helloworld")
+    public static String helloworld() {
+        return "Hello World";
+    }
 }

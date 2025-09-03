@@ -4,9 +4,10 @@
 
 package co.escuelaing.arep.microspringboot;
 
-import co.escuelaing.arep.microspringboot.httpServer.HttpServer;
 import java.io.IOException;
 import java.net.URISyntaxException;
+
+import co.escuelaing.arep.microspringboot.httpServer.HttpServer;
 
 /**
  *
@@ -16,6 +17,6 @@ public class MicroSpringBoot {
 
     public static void main(String[] args) throws IOException, URISyntaxException {
         System.out.println("Starting MicroSpringBoot:");
-        HttpServer.runServer(args);
+        HttpServer.runServer();
     }
 }

@@ -1,6 +1,3 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- */
 package co.escuelaing.arep.microspringboot.httpServer;
 
 import co.escuelaing.arep.microspringboot.annotations.GetMapping;
@@ -8,207 +5,361 @@ import co.escuelaing.arep.microspringboot.annotations.RequestParam;
 import co.escuelaing.arep.microspringboot.annotations.RestController;
 import java.net.*;
 import java.io.*;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.lang.annotation.Annotation;
 
 /**
- *
+ * HttpServer que combina la base del Taller 2 con elementos específicos de la clase
  * @author maria.sanchez-m
  */
 public class HttpServer {
-
-    public static Map<String, Method> services = new HashMap();
     
-    public static void loadServices(String[] args) {
-
-        try {
-
-            Class c = Class.forName(args[0]);
- 
-            if (c.isAnnotationPresent(RestController.class)) {
-
-                Method[] methods = c.getDeclaredMethods();
-
-                for (Method m : methods) {
-
-                    if (m.isAnnotationPresent(GetMapping.class)) {
-
-                        String mapping = m.getAnnotation(GetMapping.class).value();
-
-                        services.put(mapping, m);
-
-                    }
-
-                }
-
-            }
-
-        } catch (ClassNotFoundException ex) {
-
-            Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
-
-        }
-
-    }
- 
+    // ELEMENTO DE CLASE: Map services copiado exacto
+    public static Map<String, Method> services = new HashMap<>();
     
-    
-    public static void runServer(String[] args) throws IOException, URISyntaxException{
-        loadServices(args);
-        ServerSocket serverSocket = null;
-        try {
-            serverSocket = new ServerSocket(35000);
-        } catch (IOException e) {
-            System.err.println("Could not listen on port: 35000.");
-            System.exit(1);
-        }
-        Socket clientSocket = null;
+    // Elementos del Taller 2
+    private static final int port = 8080;
+    private static String directory = "webroot";
+    private static final Map<String, String> dataStore = new HashMap<>();
 
-        boolean running = true;
-        while (running) {
-            try {
-                System.out.println("Listo para recibir ...");
-                clientSocket = serverSocket.accept();
-            } catch (IOException e) {
-                System.err.println("Accept failed.");
-                System.exit(1);
-            }
+    // MÉTODO DE CLASE: loadServices copiado exacto
+    public static void loadServices() {
+        HttpServer server = new HttpServer();
 
-            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(
-                            clientSocket.getInputStream()));
-            String inputLine, outputLine;
-
-            String path = null;
-            boolean firstline = true;
-            URI requri = null;
-
-            while ((inputLine = in.readLine()) != null) {
-                if (firstline) {
-                    requri = new URI(inputLine.split(" ")[1]);
-                    System.out.println("Path: " + requri.getPath());
-                    firstline = false;
-                }
-                System.out.println("Received: " + inputLine);
-                if (!in.ready()) {
-                    break;
-                }
-            }
-
-            if (requri.getPath().startsWith("/app")) {
-                outputLine = invokeService(requri);
-            } else {
-                //Leo del disco
-
-                outputLine = defaultResponse();
-            }
-            out.println(outputLine);
-
-            out.close();
-            in.close();
-            clientSocket.close();
-        }
-        serverSocket.close();
-    }
-
-    private static String invokeService(URI requri){
+        // Configurar carpeta de archivos estáticos
+        server.staticfiles("webroot");
         
-
-        String header = "HTTP/1.1 200 OK\n\r"
-                + "content-type: text/html\n\r"
-                + "\n\r";
-        try{
-            HttpRequest req = new HttpRequest(requri);
-            HttpResponse res = new HttpResponse();
-            String key = requri.getPath().substring(4);
-            Method m = services.get(key); 
-            String[] argsValues = null;
-            RequestParam rp = (RequestParam) m.getParameterAnnotations()[0][0];
+        String packageName = "co.escuelaing.arep.microspringboot.examples"; // Ajusta según tu estructura
+        String path = packageName.replace('.', '/');
+        try {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            URL packageURL = classLoader.getResource(path);
             
-            if (requri.getQuery()==null){
-                argsValues = new String[]{rp.defaultValue()};
-            }else{
-               
-                String queryParamName = rp.value();
+            if (packageURL == null) {
+                System.err.println("No se pudo encontrar el paquete: " + packageName);
+                return;
+            }
 
-                argsValues = new String[]{req.getValue(queryParamName)}; 
+            File directory = new File(packageURL.toURI());
+            File[] files = directory.listFiles();
+
+            if (files == null) {
+                System.err.println("No se encontraron archivos en el paquete: " + packageName);
+                return;
+            }
+
+            for (File file : files) {
+                if (file.getName().endsWith(".class")) {
+                    String className = file.getName().substring(0, file.getName().length() - 6);
+                    String fullClassName = packageName + "." + className;
+
+                    Class<?> clazz = Class.forName(fullClassName);
+
+                    if (clazz.isAnnotationPresent(RestController.class)) {
+                        for (Method m : clazz.getDeclaredMethods()) {
+                            if (m.isAnnotationPresent(GetMapping.class)) {
+                                String mapping = m.getAnnotation(GetMapping.class).value();
+                                services.put(mapping, m);
+                                System.out.println("Servicio cargado automáticamente: " + mapping + " -> " + m.getName());
+                            }
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    // MÉTODO DE CLASE: invokeService copiado y adaptado
+    private static String invokeService(URI requri) {
+        String header = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: text/html\r\n"
+                + "\r\n";
+        try {
+            HttpRequest req = new HttpRequest(requri);
+            String key = requri.getPath().substring(4); // Quita "/app"
+            Method m = services.get(key);
+            
+            if (m == null) {
+                return header + "Servicio no encontrado: " + key;
             }
             
+            String[] argsValues = null;
             
-            return header + m.invoke(null,argsValues);
-        }catch (IllegalAccessException ex){
+            // Verificar si el método tiene parámetros
+            if (m.getParameterCount() > 0) {
+                RequestParam rp = (RequestParam) m.getParameterAnnotations()[0][0];
+                
+                if (requri.getQuery() == null) {
+                    argsValues = new String[]{rp.defaultValue()};
+                } else {
+                    String queryParamName = rp.value();
+                    argsValues = new String[]{req.getValue(queryParamName)};
+                }
+            } else {
+                argsValues = new String[0];
+            }
+            
+            return header + m.invoke(null, argsValues);
+            
+        } catch (IllegalAccessException ex) {
             Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
-        }catch (InvocationTargetException ex){
+        } catch (InvocationTargetException ex) {
             Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
         }
-        return header+"ERROR!";
+        return header + "ERROR!";
     }
 
-    public static void staticfiles(String localFilesPath) {
+    public static void startServer() throws IOException, URISyntaxException {
+        ServerSocket serverSocket = new ServerSocket(port);
+        System.out.println("Servidor iniciado en http://localhost:" + port);
+        while (true) {
+            Socket clientSocket = serverSocket.accept();
+            handleRequestClient(clientSocket);
+        }
     }
 
-    public static void start(String[] args) throws IOException, URISyntaxException {
-        runServer(args);
+    public static void handleRequestClient(Socket clientSocket) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream())); 
+            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true); 
+            BufferedOutputStream dataOut = new BufferedOutputStream(clientSocket.getOutputStream())) {
+
+            String requestLine = in.readLine();
+            if (requestLine != null) {
+                String[] tokens = requestLine.split(" ");
+                String method = tokens[0];
+                String fileRequested = tokens[1];
+
+                if (fileRequested.equals("/")) {
+                    fileRequested = "/index.html";
+                }
+
+                if (method.equals("GET")) {
+                    handleGetRequest(fileRequested, dataOut, out);
+                } else if (method.equals("POST")) {
+                    handlePostRequest(in, fileRequested, out);
+                } else {
+                    out.println("HTTP/1.1 501 Not Implemented");
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    public static String defaultResponse() {
-        return "HTTP/1.1 200 OK\r\n"
-                + "content-type: text/html\r\n"
-                + "\r\n"
-                + "<!DOCTYPE html>\n"
-                + "<html>\n"
-                + "<head>\n"
-                + "<title>Form Example</title>\n"
-                + "<meta charset=\"UTF-8\">\n"
-                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
-                + "</head>\n"
-                + "<body>\n"
-                + "<h1>Form with GET</h1>\n"
-                + "<form action=\"/hello\">\n"
-                + "<label for=\"name\">Name:</label><br>\n"
-                + "<input type=\"text\" id=\"name\" name=\"name\" value=\"John\"><br><br>\n"
-                + "<input type=\"button\" value=\"Submit\" onclick=\"loadGetMsg()\">\n"
-                + "</form>\n"
-                + "<div id=\"getrespmsg\"></div>\n"
-                + " \n"
-                + "<script>\n"
-                + "function loadGetMsg() {\n"
-                + "let nameVar = document.getElementById(\"name\").value;\n"
-                + "const xhttp = new XMLHttpRequest();\n"
-                + "xhttp.onload = function() {\n"
-                + "document.getElementById(\"getrespmsg\").innerHTML =\n"
-                + "this.responseText;\n"
-                + "}\n"
-                + "xhttp.open(\"GET\", \"/app/hello?name=\"+nameVar);\n"
-                + "xhttp.send();\n"
-                + "}\n"
-                + "</script>\n"
-                + " \n"
-                + "<h1>Form with POST</h1>\n"
-                + "<form action=\"/hellopost\">\n"
-                + "<label for=\"postname\">Name:</label><br>\n"
-                + "<input type=\"text\" id=\"postname\" name=\"name\" value=\"John\"><br><br>\n"
-                + "<input type=\"button\" value=\"Submit\" onclick=\"loadPostMsg(postname)\">\n"
-                + "</form>\n"
-                + " \n"
-                + "<div id=\"postrespmsg\"></div>\n"
-                + " \n"
-                + "<script>\n"
-                + "function loadPostMsg(name){\n"
-                + "let url = \"/hellopost?name=\" + name.value;\n"
-                + " \n"
-                + "fetch (url, {method: 'POST'})\n"
-                + ".then(x => x.text())\n"
-                + ".then(y => document.getElementById(\"postrespmsg\").innerHTML = y);\n"
-                + "}\n"
-                + "</script>\n"
-                + "</body>\n"
-                + "</html>";
+    private static void handleGetRequest(String fileRequested, BufferedOutputStream dataOut, PrintWriter out) {
+        String basePath = fileRequested.split("\\?")[0];
+
+        // 1. PRIORIDAD: Verificar servicios cargados con loadServices (Map services)
+        try {
+            URI requri = new URI("http://localhost" + fileRequested);
+            if (requri.getPath().startsWith("/app") && services.containsKey(requri.getPath().substring(4))) {
+                String response = invokeService(requri);
+                out.print(response);
+                out.flush();
+                return;
+            }
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+        }
+
+        // // 2. Verificar servicios dinámicos (BiFunction)
+        // if (services.containsKey(basePath)) {
+        //     System.out.println("Manejando ruta dinámica: " + basePath);
+
+        //     HttpRequest req = new HttpRequest(fileRequested);
+        //     HttpResponse res = new HttpResponse(out);
+
+        //     String responseBody = services.get(basePath).apply(req, res);
+
+        //     out.println("HTTP/1.1 200 OK");
+        //     out.println("Content-Type: text/html");
+        //     out.println();
+        //     out.println(responseBody);
+        //     return;
+        // }
+        
+        // 3. Endpoints específicos del Taller 2
+        if (fileRequested.startsWith("/app/greeting")) {
+            String savedName = dataStore.getOrDefault("name", "usuario");
+            String savedApellido = dataStore.getOrDefault("apellido", "");
+            String queryParams = fileRequested.split("\\?").length > 1 ? fileRequested.split("\\?")[1] : "";
+            String[] params = queryParams.split("&");
+
+            for (String param : params) {
+                if (param.startsWith("name=")) {
+                    String name = param.split("=")[1];
+                    try {
+                        name = URLDecoder.decode(name, "UTF-8");
+                    } catch (UnsupportedEncodingException e) {
+                    }
+                    dataStore.put("name", name);
+                    savedName = name;
+                }
+            }
+
+            String jsonResponse;
+            if (!savedApellido.isEmpty() && !savedApellido.equals("Apellido")) {
+                jsonResponse = "{\"name\": \"" + savedName + "\", \"apellido\": \"" + savedApellido + "\"}";
+            } else {
+                jsonResponse = "{\"name\": \"" + savedName + "\"}";
+            }
+
+            out.println("HTTP/1.1 200 OK");
+            out.println("Content-Type: application/json");
+            out.println("Content-Length: " + jsonResponse.length());
+            out.println();
+            out.print(jsonResponse);
+            out.flush();
+            return;
+        }
+
+        // 4. Servir archivos estáticos (del Taller 2)
+        File file = new File(directory, fileRequested);
+
+        if (file.exists() && !file.isDirectory()) {
+            try {
+                String contentType = getType(fileRequested);
+                long fileLength = file.length();
+
+                out.println("HTTP/1.1 200 OK");
+                out.println("Content-Type: " + contentType);
+                out.println("Content-Length: " + fileLength);
+                out.println();
+                out.flush();
+
+                FileInputStream fileInputStream = new FileInputStream(file);
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = fileInputStream.read(buffer)) != -1) {
+                    dataOut.write(buffer, 0, bytesRead);
+                }
+                dataOut.flush();
+                fileInputStream.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            out.println("HTTP/1.1 404 Not Found");
+            out.println("Content-Type: text/html");
+            out.println();
+            out.println("<html><body><h1>404 - File not found</h1></body></html>");
+        }
+    }
+
+    private static void handlePostRequest(BufferedReader in, String fileRequested, PrintWriter out) {
+        if (fileRequested.equals("/app/updateName")) {
+            try {
+                String line;
+                int contentLength = 0;
+
+                while (!(line = in.readLine()).isEmpty()) {
+                    if (line.startsWith("Content-Length:")) {
+                        contentLength = Integer.parseInt(line.split(":")[1].trim());
+                    }
+                }
+
+                String apellido = "Apellido";
+
+                if (contentLength > 0) {
+                    char[] body = new char[contentLength];
+                    in.read(body, 0, contentLength);
+                    String requestBody = new String(body);
+
+                    if (requestBody.contains("\"apellido\"")) {
+                        String[] parts = requestBody.split("\"apellido\"\\s*:\\s*\"");
+                        if (parts.length > 1) {
+                            String namePart = parts[1];
+                            int endQuote = namePart.indexOf("\"");
+                            if (endQuote > 0) {
+                                apellido = namePart.substring(0, endQuote);
+                            }
+                        }
+                    }
+                    dataStore.put("apellido", apellido);
+                }
+
+                String responseMessage = "{\"mensaje\": \"Apellido actualizado: " + apellido + "\"}";
+
+                out.println("HTTP/1.1 200 OK");
+                out.println("Content-Type: application/json");
+                out.println("Content-Length: " + responseMessage.length());
+                out.println();
+                out.print(responseMessage);
+                out.flush();
+
+            } catch (IOException e) {
+                out.println("HTTP/1.1 500 Internal Server Error");
+            }
+        } else {
+            out.println("HTTP/1.1 404 Not Found");
+        }
+    }
+
+    private static String getType(String fileRequested) {
+        String extension = getFileExtension(fileRequested);
+
+        if (extension.equals("html")) {
+            return "text/html; charset=utf-8";
+        }
+        if (extension.equals("css")) {
+            return "text/css; charset=utf-8";
+        }
+        if (extension.equals("js")) {
+            return "application/javascript; charset=utf-8";
+        }
+        if (extension.equals("png")) {
+            return "image/png";
+        }
+        if (extension.equals("jpg") || extension.equals("jpeg")) {
+            return "image/jpeg";
+        }
+        return "application/octet-stream";
+    }
+
+    private static String getFileExtension(String fileRequested) {
+        int dotIndex = fileRequested.lastIndexOf('.');
+        if (dotIndex == -1) {
+            return "";
+        }
+        return fileRequested.substring(dotIndex + 1).toLowerCase();
+    }
+
+    // // Métodos del Taller 2 para compatibilidad
+    // public static void get(String path, BiFunction<HttpRequest, HttpResponse, String> handler) {
+    //     services.put(path, handler);
+    // }
+    
+    public static void staticfiles(String path) {
+        directory = path;
+    }
+    
+    public static Map<String, String> getDataStore() {
+        return dataStore;
+    }
+    
+    // public static Map<String, BiFunction<HttpRequest, HttpResponse, String>> getServices() {
+    //     return services;
+    // }
+
+    // MÉTODO PRINCIPAL que integra todo
+    public static void runServer() throws IOException, URISyntaxException {
+    // Solución aquí
+        loadServices();
+        System.out.println("Servicios registrados:");
+        services.forEach((k, v) -> System.out.println(k + " -> " + v.getName()));
+
+        startServer();
     }
 
 }
